@@ -157,6 +157,17 @@ ENV/
 env.bak/
 venv.bak/
 
+# Local data artifacts (keep directory structure via .gitkeep)
+data/raw/**
+!data/raw/**/.gitkeep
+data/interim/**
+!data/interim/**/.gitkeep
+data/processed/**
+!data/processed/**/.gitkeep
+results/
+*.parquet
+*.parquet.tmp
+
 # Spyder project settings
 .spyderproject
 .spyproject
