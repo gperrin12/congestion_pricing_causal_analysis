@@ -1,5 +1,7 @@
-pandas>=2.2
-pyarrow>=15
+# Keep pandas + pyarrow in lockstep; mismatched pairs raise
+# ArrowKeyError: A type extension with name pandas.period already defined
+pandas>=2.2.3,<2.3
+pyarrow>=17.0.0,<19
 pyyaml>=6
 python-dotenv>=1.0
 requests>=2.31
