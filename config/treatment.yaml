@@ -1,0 +1,41 @@
+# CRZ definition, distance bands, treatment date(s).
+# Zone assignment for Panel A is fixed here (see analysis_plan.md §4).
+
+treatment:
+  name: nyc_congestion_pricing
+  t0: "2025-01-05"  # tolling begins
+
+sample_windows:
+  pre_start: "2022-01-03"
+  pre_end: "2024-06-02"
+  washout_start: "2024-06-03"
+  washout_end: "2025-01-04"
+  post_start: "2025-01-05"
+  post_end: "2026-06-30"
+
+# Congestion Relief Zone: Manhattan local streets south of 60th St.
+# FDR Drive, West Side Highway, and Hugh L. Carey → West Street connections excluded
+# from tolling; for station assignment we use the south-of-60th polygon.
+crz:
+  borough: Manhattan
+  south_of_street: 60th
+  # Approximate bounding box used until a precise polygon is wired in geo/.
+  # South of 60th St ≈ latitude < 40.7681 in Manhattan.
+  approx_north_lat: 40.7681
+  approx_west_lon: -74.025
+  approx_east_lon: -73.96
+  approx_south_lat: 40.700
+
+zone_bands:
+  # Station-complex centroid rules (Panel A).
+  crz: "centroid inside CRZ polygon (Manhattan south of 60th St)"
+  border: "Manhattan centroid between 60th and 96th St"
+  border_north_street: 96th
+  border_north_lat_approx: 40.788
+  control: "all other complexes at least 1 km from CRZ boundary"
+  control_min_distance_km: 1.0
+
+robustness_bands:
+  border_alt_86th_lat_approx: 40.779
+  border_alt_110th_lat_approx: 40.794
+  control_min_distance_km_alt: [0.5, 2.0]
