@@ -1,0 +1,1 @@
+# the static version: a single "treated × post" coefficient. Simplest estimate, useful as the baseline everything else is compared against.
