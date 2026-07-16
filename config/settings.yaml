@@ -32,3 +32,15 @@ mta_ridership:
   # Aggregate across payment_method / fare_class_category at pull time.
   grain: station_hour
   output_dir: data/raw/mta_subway_hourly
+
+noaa_ghcn:
+  # Central Park daily weather covariates for Panel A (analysis_plan.md §4).
+  station_id: USW00094728
+  station_name: "NY CITY CENTRAL PARK, NY US"
+  # Public GHCN-Daily station CSV (no API token required).
+  url: https://www.ncei.noaa.gov/data/global-historical-climatology-network-daily/access/USW00094728.csv
+  start_date: "2022-01-03"
+  end_date: "2026-06-30"
+  # Keep core covariates; GHCN stores PRCP in tenths of mm, temps in tenths of °C.
+  columns: [PRCP, TMAX, TMIN, TAVG, SNOW, SNWD, AWND]
+  output_path: data/raw/noaa_ghcn_central_park/daily.parquet
