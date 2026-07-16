@@ -33,12 +33,16 @@ crz:
 
 zone_bands:
   # Station-complex centroid rules (Panel A).
-  crz: "centroid inside CRZ polygon (Manhattan south of 60th St)"
-  border: "Manhattan centroid between 60th and 96th St"
+  # Assignment priority: crz > border > control (> min km) > near.
+  crz: "centroid inside CRZ polygon"
+  border: "Manhattan centroid between 60th and 96th St, not inside CRZ"
   border_north_street: 96th
   border_north_lat_approx: 40.788
+  # Loose south bound: East Side 60th/63rd sits south of West Side 60th in WGS84.
+  border_south_lat_approx: 40.761
   control: "all other complexes at least 1 km from CRZ boundary"
   control_min_distance_km: 1.0
+  near: "outside CRZ/border but within control_min_distance_km (excluded from primary controls)"
 
 robustness_bands:
   border_alt_86th_lat_approx: 40.779
