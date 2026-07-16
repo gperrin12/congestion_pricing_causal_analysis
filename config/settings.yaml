@@ -62,3 +62,11 @@ station_zones:
   geojson_path: data/processed/station_zones.geojson
   # Distance CRS: NAD83 / New York Long Island (US survey feet → meters in code).
   distance_crs: EPSG:2263
+
+panel_station_week:
+  output_path: data/processed/panel_station_week.parquet
+  manifest_path: data/processed/manifest.json
+  # Weekday peak hour starts (local), inclusive of the hour beginning at each value.
+  weekday_peak_hours: [7, 8, 9, 16, 17, 18]
+  # Drop complexes missing more than this share of ISO weeks in-sample.
+  min_week_coverage: 0.80

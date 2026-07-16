@@ -4,6 +4,8 @@
 treatment:
   name: nyc_congestion_pricing
   t0: "2025-01-05"  # tolling begins
+  # Concurrent MTA pricing bundle (fare + B&T + OMNY transition start).
+  fare_change_date: "2026-01-04"
 
 sample_windows:
   pre_start: "2022-01-03"
