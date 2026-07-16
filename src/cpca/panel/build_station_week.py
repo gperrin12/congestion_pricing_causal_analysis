@@ -123,6 +123,26 @@ def iso_week_start(ts: pd.Series) -> pd.Series:
     return days - pd.to_timedelta(days.dt.dayofweek, unit="D")
 
 
+def keep_complete_weeks(
+    frame: pd.DataFrame,
+    *,
+    week_col: str,
+    start: date,
+    end: date,
+) -> pd.DataFrame:
+    """Drop ISO weeks that are only partially inside [start, end].
+
+    A week starting on Monday is complete iff
+    week_start >= sample start and week_start + 6 days <= sample end.
+    """
+    week_start = pd.to_datetime(frame[week_col]).dt.normalize()
+    week_end = week_start + pd.Timedelta(days=6)
+    start_ts = pd.Timestamp(start)
+    end_ts = pd.Timestamp(end)
+    keep = (week_start >= start_ts) & (week_end <= end_ts)
+    return frame.loc[keep].copy()
+
+
 def assign_period(week_start: pd.Series, windows: dict) -> pd.Series:
     pre_end = pd.Timestamp(windows["pre_end"])
     washout_end = pd.Timestamp(windows["washout_end"])
@@ -267,14 +287,27 @@ def build_panel(
         end=end,
         peak_hours=peak_hours,
     )
-    zones = pd.read_parquet(ROOT / settings["station_zones"]["output_path"])
-    zones["station_complex_id"] = zones["station_complex_id"].astype(str)
-
     weather = weekly_weather(
         ROOT / settings["noaa_ghcn"]["output_path"],
         start=start,
         end=end,
     )
+
+    if panel_cfg.get("require_complete_weeks", True):
+        before_weeks = int(ridership["week_start"].nunique())
+        ridership = keep_complete_weeks(
+            ridership, week_col="week_start", start=start, end=end
+        )
+        weather = keep_complete_weeks(
+            weather, week_col="week_start", start=start, end=end
+        )
+        after_weeks = int(ridership["week_start"].nunique())
+        dropped_edge_weeks = before_weeks - after_weeks
+    else:
+        dropped_edge_weeks = 0
+
+    zones = pd.read_parquet(ROOT / settings["station_zones"]["output_path"])
+    zones["station_complex_id"] = zones["station_complex_id"].astype(str)
 
     zone_cols = [
         "station_complex_id",
@@ -336,6 +369,8 @@ def build_panel(
         "zone_counts": panel.groupby("zone")["station_complex_id"].nunique().to_dict(),
         "period_counts": panel["period"].value_counts().to_dict(),
         "dropped_stations": dropped,
+        "dropped_incomplete_edge_weeks": dropped_edge_weeks,
+        "require_complete_weeks": bool(panel_cfg.get("require_complete_weeks", True)),
         "min_week_coverage": float(panel_cfg["min_week_coverage"]),
         "weekday_peak_hours": peak_hours,
         "sample_windows": windows,

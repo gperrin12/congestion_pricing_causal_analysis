@@ -159,13 +159,21 @@ class TestPanelCompleteness:
 class TestSampleWindows:
     def test_hard_stop_respected(self, panel: pd.DataFrame, treatment: dict) -> None:
         post_end = pd.Timestamp(treatment["sample_windows"]["post_end"])
-        # week_start is Monday; last allowed Monday is the ISO week containing post_end.
-        last_allowed = _iso_week_start(post_end)
         week_start = pd.to_datetime(panel["week_start"])
-        assert week_start.max() <= last_allowed
-        # No calendar day in the underlying sample may exceed post_end; week_start
-        # itself must not start after post_end.
+        week_end = week_start + pd.Timedelta(days=6)
+        # Complete-week rule: every panel week lies fully inside the sample window.
+        assert week_end.max() <= post_end
         assert week_start.max() <= post_end
+
+    def test_weeks_are_complete_inside_sample(
+        self, panel: pd.DataFrame, treatment: dict
+    ) -> None:
+        start = pd.Timestamp(treatment["sample_windows"]["pre_start"])
+        end = pd.Timestamp(treatment["sample_windows"]["post_end"])
+        week_start = pd.to_datetime(panel["week_start"])
+        week_end = week_start + pd.Timedelta(days=6)
+        assert (week_start >= start).all()
+        assert (week_end <= end).all()
 
     def test_sample_starts_on_or_after_pre_start(
         self, panel: pd.DataFrame, treatment: dict
