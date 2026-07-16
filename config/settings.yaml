@@ -44,3 +44,29 @@ noaa_ghcn:
   # Keep core covariates; GHCN stores PRCP in tenths of mm, temps in tenths of °C.
   columns: [PRCP, TMAX, TMIN, TAVG, SNOW, SNWD, AWND]
   output_path: data/raw/noaa_ghcn_central_park/daily.parquet
+
+crz_boundary:
+  # Official MTA CBD / Congestion Relief Zone geofence (data.ny.gov).
+  # Manhattan at/south of 60th St, excluding FDR Drive, West Side Highway/9A,
+  # Battery Park Underpass, and Hugh L. Carey Tunnel surface connections.
+  socrata_id: srxy-5nxn
+  name: "MTA Central Business District Geofence: Beginning June 2024"
+  geojson_url: https://data.ny.gov/api/geospatial/srxy-5nxn?method=export&format=GeoJSON
+  raw_path: data/raw/crz/mta_cbd_geofence_raw.geojson
+  union_path: data/raw/crz/crz_boundary.geojson
+  crs: EPSG:4326
+
+station_zones:
+  # Station-complex centroids from ridership partitions → zone + distance.
+  output_path: data/processed/station_zones.parquet
+  geojson_path: data/processed/station_zones.geojson
+  # Distance CRS: NAD83 / New York Long Island (US survey feet → meters in code).
+  distance_crs: EPSG:2263
+
+panel_station_week:
+  output_path: data/processed/panel_station_week.parquet
+  manifest_path: data/processed/manifest.json
+  # Weekday peak hour starts (local), inclusive of the hour beginning at each value.
+  weekday_peak_hours: [7, 8, 9, 16, 17, 18]
+  # Drop complexes missing more than this share of ISO weeks in-sample.
+  min_week_coverage: 0.80
