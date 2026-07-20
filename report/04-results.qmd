@@ -1,0 +1,5 @@
+# Results
+
+::: {.callout-note}
+**Skeleton.** Primary estimates by outcome and specification will render from `results/estimates/` and `results/figures/`. Headline figure: S1 event study. No inline refitting.
+:::

@@ -1,0 +1,64 @@
+# Background
+
+## Setting
+
+On January 5, 2025, the MTA began tolling vehicles entering the Congestion Relief Zone (CRZ): Manhattan local streets at and south of 60th Street. The FDR Drive, West Side Highway / Route 9A, Battery Park Underpass, and Hugh L. Carey Tunnel connections to West Street are excluded from tolling. The MTA made minor boundary corrections on 2025-01-08. Station assignment in this analysis uses the official CRZ polygon (data.ny.gov dataset `srxy-5nxn`), not a latitude cutoff; no station complex sits ambiguously on the boundary.
+
+The peak toll for passenger vehicles is $9 (weekdays 5am-9pm, weekends 9am-9pm), with a 75% overnight discount, crossing credits for the four tunnels entering the zone, and scheduled increases to $12 in 2028 and $15 in 2031. Taxis and for-hire vehicles are tolled per trip rather than once daily: $0.75 per yellow / boro taxi trip and $1.50 per high-volume FHV trip.
+
+## Timeline
+
+These events structure the identification strategy. Dates were verified against contemporaneous reporting before estimation (see analysis plan §1 and Deviations Log).
+
+| Date | Event |
+|---|---|
+| 2023-06-26 | FHWA issues final federal approval; toll infrastructure build-out begins |
+| 2023-12-06 | MTA board approves TMRB-recommended toll rates ($15 peak) |
+| 2024-03-27 | MTA board gives final approval; start date set for 2024-06-30 |
+| 2024-06-05 | Gov. Hochul pauses the program indefinitely (story leaked 2024-06-04) |
+| 2024-11-14 | Hochul announces revival at reduced $9 toll, start 2025-01-05 |
+| 2024-11-18 | MTA board approves revised plan; federal approval follows 2024-11-21 |
+| 2025-01-05 | Tolling begins (treatment date, T0) |
+| 2025-02-19 | USDOT revokes federal approval; tolling continues under litigation |
+| 2026-01-04 | MTA base fare rises $2.90 to $3.00; B&T tolls rise 7.5%; OMNY-only transition begins |
+| 2026-03-03 | Federal court rules the USDOT revocation unlawful; program secure |
+
+Three dates appear as annotations on every time-series figure in later chapters:
+
+- **2024-06-05** - pause announcement (start of the washout window)
+- **2025-01-05** - T0
+- **2026-01-04** - concurrent MTA fare / B&T / OMNY bundle
+
+## Research questions
+
+- **RQ1 (primary).** What is the effect of CRZ tolling on subway ridership (station entries), overall and by geography (inside CRZ, border band, rest of system)?
+- **RQ2.** What is the effect on vehicle entries into the CRZ? (First-stage / manipulation check.)
+- **RQ3.** What are the effects on secondary outcomes: bus speeds within the zone, taxi / FHV trips into the zone, Citi Bike ridership, MTA Bridges & Tunnels crossings (diversion), and air quality in and around the zone?
+- **RQ4 (methodological).** How do estimates and inference differ across DiD, synthetic control, synthetic DiD, and Bayesian structural time series applied to the same panel, and why?
+
+## Hypotheses
+
+Directional hypotheses were stated before estimation (analysis plan §3):
+
+- **H1.** Vehicle entries into the CRZ decline post-T0 (expected magnitude: 5-15%, based on London / Stockholm precedents).
+- **H2.** Systemwide subway ridership increases modestly post-T0 relative to counterfactual (expected: 1-4%).
+- **H3.** The ridership effect is not concentrated at CRZ stations. Turnstile data records entries only, so mode-shifted commuters board at origin stations outside the zone; CRZ entries capture mainly return legs and CRZ-origin trips. We expect diffuse positive effects, with border-band (60th-96th St) stations showing effects at least as large as CRZ stations.
+- **H4.** Weekday bus speeds inside the CRZ increase post-T0.
+- **H5.** Taxi / FHV trips into the CRZ are flat to positive post-T0. Taxis pay a per-trip toll roughly one-tenth the private-car rate while benefiting fully from faster streets, so the net incentive plausibly favors taxi use.
+- **H6.** No large diversion increase at untolled crossings (George Washington Bridge spillover is the main candidate; treated as exploratory).
+
+H3 is a design feature, not a puzzle to "fix." Small CRZ-station effects with larger border or systemwide effects are consistent with the entry-only measurement and with SUTVA concerns discussed in the methods chapter.
+
+## External benchmarks
+
+Published figures recorded before estimation, to reconcile against rather than target (analysis plan §10):
+
+- MTA-reported vehicle-entry decline: roughly 11-13% (about 67,000-87,000 fewer daily entries depending on period). Comparison point for H1.
+- Reported MTA ridership increases of 4.4-13% across transit modes (May 2025 analyses), and a raw 7.7% year-over-year subway ridership increase 2024 to 2025. The raw YoY figure includes recovery trend; causal estimates under H2 are expected to be smaller.
+- Early reports of increased taxi trips and travel speeds within the zone. Comparison point for H5.
+
+Divergence from these benchmarks is a finding to explain, not an error to correct toward.
+
+## Scope of this report
+
+Primary attention is on RQ1 (subway entries) and the first-stage check in RQ2. Secondary outcomes in RQ3 enter as they are ingested and estimated. RQ4 is the explicit comparison across methods on identical panels - disagreement across estimators is a documented result, not a tuning target.

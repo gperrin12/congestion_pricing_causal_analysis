@@ -1,0 +1,5 @@
+# Discussion
+
+::: {.callout-note}
+**Skeleton.** Interpretation against H1-H6, reconciliation with external benchmarks, limitations (SUTVA, concurrent 2026-01-04 events, post-period policy uncertainty), and design implications of pretrend adjustments.
+:::

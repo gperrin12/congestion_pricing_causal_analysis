@@ -1,0 +1,29 @@
+# Preface {.unnumbered}
+
+On January 5, 2025, the MTA began tolling vehicles entering Manhattan's Congestion Relief Zone (CRZ). This report estimates the causal effect of that policy on subway ridership and related outcomes, using a pre-registered design and several estimators applied to the same panels.
+
+The analysis is organized around four research questions (RQ1-RQ4) stated in the [analysis plan](../config/analysis_plan.md) before any post-treatment causal estimates were produced. The plan text is frozen; amendments appear only in its Deviations Log.
+
+## How to read this report
+
+| Chapter | Contents |
+|---|---|
+| [Background](01-background.qmd) | Policy setting, timeline, questions, and hypotheses |
+| [Data](02-data.qmd) | Sources, zone assignment, panels, and sample windows |
+| [Methods](03-methods.qmd) | Estimators S1-S6, robustness checks, threats to validity |
+| [Results](04-results.qmd) | Primary estimates by outcome and specification |
+| [Comparison](05-comparison.qmd) | Cross-estimator disagreement (RQ4) |
+| [Discussion](06-discussion.qmd) | Interpretation, benchmarks, and limitations |
+
+All figures and tables that report causal estimates are rendered from serialized outputs in `results/estimates/` and `results/figures/`. Quarto chapters do not re-fit estimators.
+
+## Reproducibility
+
+```bash
+make data       # public ingest (Socrata, NOAA, CRZ geofence)
+make panel      # build panels + invariant tests
+make estimates  # estimator × outcome × spec grid
+make report     # render this book
+```
+
+Treatment definitions, distance bands, and sample windows live in `config/treatment.yaml`. Panel provenance (row counts, content hashes, exclusions) is recorded in `data/processed/manifest.json`.

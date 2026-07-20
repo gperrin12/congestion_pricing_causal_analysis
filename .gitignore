@@ -227,3 +227,8 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Quarto
+report/_book/
+report/.quarto/
+**/_freeze/

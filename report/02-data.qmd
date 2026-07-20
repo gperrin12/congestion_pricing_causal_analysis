@@ -1,0 +1,288 @@
+# Data
+
+```{python}
+#| label: setup
+#| include: false
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+import pandas as pd
+import yaml
+from IPython.display import display
+
+ROOT = Path("..").resolve()
+MANIFEST_PATH = ROOT / "data" / "processed" / "manifest.json"
+TREATMENT_PATH = ROOT / "config" / "treatment.yaml"
+SETTINGS_PATH = ROOT / "config" / "settings.yaml"
+PANEL_PATH = ROOT / "data" / "processed" / "panel_station_week.parquet"
+
+with open(TREATMENT_PATH) as f:
+    treatment = yaml.safe_load(f)
+with open(SETTINGS_PATH) as f:
+    settings = yaml.safe_load(f)
+
+manifest = None
+if MANIFEST_PATH.exists():
+    with open(MANIFEST_PATH) as f:
+        manifest = json.load(f)
+
+panel_entry = (manifest or {}).get("panel_station_week")
+HAS_PANEL = PANEL_PATH.exists() and panel_entry is not None
+
+mta_start = settings["mta_ridership"]["start_date"]
+mta_end = settings["mta_ridership"]["end_date"]
+```
+
+All estimators consume the canonical panels under `data/processed/` and nothing else. Raw and interim files are never joined inside an estimator. Treatment dates, zone rules, and sample windows are read from `config/treatment.yaml`.
+
+## Pipeline overview
+
+```
+public sources  →  data/raw/  →  geo + panel build  →  data/processed/
+                                                         ├─ panel_station_week.parquet
+                                                         ├─ station_zones.parquet
+                                                         └─ manifest.json
+```
+
+| Layer | Role |
+|---|---|
+| `src/cpca/ingest/` | Idempotent pulls from Socrata and NOAA |
+| `src/cpca/geo/` | CRZ polygon union and station-complex zone assignment |
+| `src/cpca/panel/` | Single convergence point for joins into Panel A (and later Panel B) |
+
+`make data` refreshes ingest and zone assignment. `make panel` rebuilds panels and runs `tests/test_panel_invariants.py`; both must pass before estimation.
+
+## Sources
+
+### MTA subway hourly ridership
+
+Station entries come from the MTA's public hourly ridership datasets on data.ny.gov:
+
+| Dataset | Socrata ID | Coverage |
+|---|---|---|
+| MTA Subway Hourly Ridership: 2020-2024 | `wujg-7c2s` | Through 2024 |
+| MTA Subway Hourly Ridership: Beginning 2025 | `5wq4-mkjj` | 2025 onward |
+
+Grain at source is station complex × hour × payment method × fare class. Ingest aggregates across payment method and fare class to station-hour before the weekly panel is built. The outcome is **entries only** (no tap-out), which is why H3 expects diffuse rather than CRZ-concentrated ridership effects.
+
+Pull window (inclusive of washout): `{python} mta_start` through `{python} mta_end`.
+
+### CRZ boundary
+
+Official MTA CBD / Congestion Relief Zone geofence (`srxy-5nxn`). `python -m cpca.geo.build_crz_polygon` downloads the GeoJSON and writes a unioned boundary used for point-in-polygon assignment.
+
+### Station locations and zones
+
+Complex centroids are taken from the ridership partitions and assigned in `src/cpca/geo/assign_zones.py` using rules fixed in `treatment.yaml`:
+
+| Zone | Rule |
+|---|---|
+| `crz` | Centroid inside the official CRZ polygon |
+| `border` | Manhattan centroid between 60th and 96th St, not inside CRZ |
+| `control` | All other complexes at least 1 km from the CRZ boundary |
+| `near` | Outside CRZ / border but within 1 km (excluded from primary controls) |
+
+Assignment priority: `crz` > `border` > `control` (> min km) > `near`. Distance is computed in NAD83 / New York Long Island (EPSG:2263).
+
+::: {.callout-note}
+**Figure placeholder.** Station map by zone will render from `results/figures/station_zones_map.png` once the figure pipeline is wired.
+:::
+
+### Weather covariates
+
+NOAA GHCN-Daily for Central Park (`USW00094728`): weekly precipitation (mm) and mean temperature (°C), joined onto Panel A. No API token required.
+
+### Panel B sources (planned)
+
+Cross-city synthetic control and synthetic DiD (S3, S5) use FTA National Transit Database heavy-rail unlinked passenger trips by agency. The donor pool is fixed in advance (WMATA, CTA, MBTA, SEPTA, BART, LA Metro; PATH excluded as too exposed). Panel B is not yet built; this chapter will document the frozen donor list and manifest entry when `panel_system_month.parquet` lands.
+
+## Panel A: station × week
+
+**File:** `data/processed/panel_station_week.parquet`
+
+Keys: `station_complex_id` (string, as published by MTA) and ISO week start date (Monday).
+
+```{python}
+#| label: panel-summary
+#| echo: false
+if HAS_PANEL:
+    pe = panel_entry
+    display(
+        pd.DataFrame(
+            {
+                "metric": [
+                    "Rows",
+                    "Station complexes",
+                    "ISO weeks",
+                    "Week range",
+                    "Primary-sample complexes",
+                    "Excluded complexes",
+                ],
+                "value": [
+                    f"{pe['n_rows']:,}",
+                    f"{pe['n_stations']:,}",
+                    f"{pe['n_weeks']:,}",
+                    f"{pe['week_start_min']} to {pe['week_start_max']}",
+                    f"{pe['n_primary_stations']:,}",
+                    f"{pe['n_excluded_stations']:,}",
+                ],
+            }
+        )
+    )
+else:
+    display(
+        pd.DataFrame(
+            {
+                "metric": ["Status"],
+                "value": ["Panel not found - run make panel before rendering tables."],
+            }
+        )
+    )
+```
+
+### Outcomes and covariates
+
+| Column | Role |
+|---|---|
+| `weekly_entries` | Primary raw outcome (sum of hourly entries) |
+| `log_weekly_entries` | Primary transformed outcome: $\log(1 + \text{weekly entries})$ |
+| `weekday_peak_entries` | Secondary; peak hours 7-9 and 16-18 on weekdays |
+| `weekend_entries` | Secondary |
+| `precip_mm`, `tavg_c` | Weather covariates |
+| `holiday_week` | Indicator for weeks containing a US federal holiday |
+| `fare_change` | Indicator for weeks on/after 2026-01-04 |
+| `zone`, `dist_to_crz_boundary_km` | Treatment geography |
+| `period`, `post`, `weeks_since_t0` | Sample-window labels relative to T0 |
+| `excluded`, `primary_sample`, `exclude_reason` | Exclusion flags for primary specs |
+
+### Zone composition
+
+```{python}
+#| label: zone-counts
+#| echo: false
+if HAS_PANEL:
+    zc = panel_entry["zone_counts"]
+    display(
+        pd.DataFrame({"zone": list(zc.keys()), "n_complexes": list(zc.values())})
+        .sort_values("zone")
+        .reset_index(drop=True)
+    )
+```
+
+## Sample windows
+
+Windows are defined in `config/treatment.yaml` and labeled on every Panel A row.
+
+```{python}
+#| label: sample-windows
+#| echo: false
+sw = treatment["sample_windows"]
+display(
+    pd.DataFrame(
+        [
+            (
+                "Pre (registered)",
+                sw["pre_start"],
+                sw["pre_end"],
+                "SC / SDID pre-period; full recovery window",
+            ),
+            (
+                "DiD pre (S1/S2)",
+                sw["did_pre_start"],
+                sw["pre_end"],
+                "Shortened after pretrend failure; see Deviations Log",
+            ),
+            (
+                "Washout",
+                sw["washout_start"],
+                sw["washout_end"],
+                "Pause + anticipation; excluded from primary specs",
+            ),
+            (
+                "Post",
+                sw["post_start"],
+                sw["post_end"],
+                "Hard stop; later data ignored even if available",
+            ),
+        ],
+        columns=["Window", "Start", "End", "Notes"],
+    )
+)
+```
+
+**Washout.** 2024-06-03 through 2025-01-04 brackets the pause leak/announcement and the anticipation window through the eve of tolling. It is excluded from primary specifications by design (robustness R3 re-includes it with an anticipation dummy).
+
+**Post hard stop.** 2026-06-30. The post period splits naturally at 2026-01-04 (fare / B&T / OMNY bundle): months 0-11 after T0 are free of concurrent MTA pricing events.
+
+**DiD pre-window.** Pretrend diagnostics on the registered pre window (2022-01-03 to 2024-06-02) rejected parallel trends for CRZ and border vs control (analysis plan §12, 2026-07-20). Primary S1/S2 specs use `did_pre_start: 2023-07-01` and station-specific linear trends; the registered `pre_start` is retained for synthetic control / synthetic DiD.
+
+```{python}
+#| label: period-weeks
+#| echo: false
+if HAS_PANEL:
+    pc = panel_entry["period_counts"]
+    p = pd.read_parquet(PANEL_PATH, columns=["period", "week_start"])
+    weeks = (
+        p.groupby("period", observed=True)["week_start"]
+        .nunique()
+        .rename("n_weeks")
+        .reset_index()
+    )
+    rows_ct = pd.Series(pc, name="n_rows").rename_axis("period").reset_index()
+    display(weeks.merge(rows_ct, on="period"))
+```
+
+## Station exclusions
+
+Primary Panel A specs drop complexes listed in `treatment.yaml` → `exclude_stations`. Rows remain in the panel with `excluded=True` / `primary_sample=False` for transparency and robustness.
+
+| Reason | Complexes | Rationale |
+|---|---|---|
+| Seasonal | Rockaway A/S branch (11 stations) | Outer-Queens seasonal demand, not toll-related |
+| Construction | Flushing Line / 7 renewals (8 stations) | Documented long-run skips / renewals overlapping the sample |
+
+```{python}
+#| label: exclusions
+#| echo: false
+ex = treatment.get("exclude_stations", [])
+display(pd.DataFrame(ex)[["id", "name", "reason"]])
+```
+
+## Provenance
+
+Every panel build updates `data/processed/manifest.json` with row counts, zone and period tallies, exclusion IDs, input paths, and content hashes (SHA-256) for weather, zones, and the panel itself.
+
+```{python}
+#| label: provenance
+#| echo: false
+if HAS_PANEL:
+    pe = panel_entry
+    inputs = pe.get("inputs", {})
+    display(
+        pd.DataFrame(
+            [
+                ("Created at (UTC)", pe.get("created_at", "")),
+                ("Panel SHA-256", pe.get("panel_sha256", "")[:16] + "..."),
+                ("Zones SHA-256", str(inputs.get("zones_sha256", ""))[:16] + "..."),
+                ("Weather SHA-256", str(inputs.get("weather_sha256", ""))[:16] + "..."),
+                ("Ridership partitions", str(inputs.get("n_ridership_partitions", ""))),
+                ("T0", pe.get("t0", "")),
+                ("Fare-change date", pe.get("fare_change_date", "")),
+            ],
+            columns=["Field", "Value"],
+        )
+    )
+else:
+    display(
+        pd.DataFrame(
+            {
+                "Field": ["Status"],
+                "Value": ["Run make panel to populate the manifest."],
+            }
+        )
+    )
+```
+
+Invariant tests (`tests/test_panel_invariants.py`) guard key uniqueness, zone coverage, sample-window labels, and exclusion consistency. Failing invariants mean a data problem; they are not loosened to green the build.

@@ -1,0 +1,38 @@
+project:
+  type: book
+  output-dir: _book
+
+book:
+  title: "Causal Effects of NYC Congestion Pricing"
+  subtitle: "Subway ridership and related outcomes in the Congestion Relief Zone"
+  author: "Geoff Perrin"
+  date: today
+  chapters:
+    - index.qmd
+    - 01-background.qmd
+    - 02-data.qmd
+    - 03-methods.qmd
+    - 04-results.qmd
+    - 05-comparison.qmd
+    - 06-discussion.qmd
+  appendices:
+    - A-analysis-plan.qmd
+
+bibliography: references.bib
+
+format:
+  html:
+    theme: cosmo
+    toc: true
+    toc-depth: 3
+    number-sections: true
+    code-fold: true
+    code-tools: true
+
+execute:
+  freeze: auto
+  echo: false
+  warning: false
+
+# Figures and tables in later chapters read from ../results/.
+# Do not recompute causal estimates inside Quarto chunks.
