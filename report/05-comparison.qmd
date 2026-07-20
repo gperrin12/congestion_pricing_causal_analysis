@@ -1,0 +1,5 @@
+# Cross-estimator comparison
+
+::: {.callout-note}
+**Skeleton.** RQ4: render the full S1-S6 grid for the systemwide ridership effect with no manual selection (analysis plan §11). Disagreement across methods is a documented result.
+:::

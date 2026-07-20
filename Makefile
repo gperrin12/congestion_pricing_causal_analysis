@@ -17,7 +17,11 @@ estimates:
 	@echo "Estimator grid not wired yet"
 
 report:
-	@echo "Quarto report not wired yet"
+	@command -v quarto >/dev/null 2>&1 || { \
+		echo "quarto not found; install from https://quarto.org/docs/get-started/"; \
+		exit 1; \
+	}
+	cd report && quarto render
 
 test:
 	$(PYTHON) -m pytest tests -q

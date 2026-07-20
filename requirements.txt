@@ -10,3 +10,5 @@ shapely>=2.0
 geopandas>=1.0
 contextily>=1.6
 pytest>=8.0
+jupyter>=1.0
+ipykernel>=6.29

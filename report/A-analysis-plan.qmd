@@ -1,0 +1,5 @@
+# Analysis plan {#sec-analysis-plan}
+
+The pre-registered plan lives at [`config/analysis_plan.md`](../config/analysis_plan.md). Its body is frozen; amendments appear only in Section 12 (Deviations Log).
+
+This appendix exists so the rendered book can link to the plan without duplicating or editing its text. Open the markdown file in the repository for the authoritative copy.

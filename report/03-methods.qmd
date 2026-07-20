@@ -1,0 +1,20 @@
+# Methods
+
+::: {.callout-note}
+**Skeleton.** This chapter will document estimators S1-S6, the first-stage / manipulation check, robustness checks R1-R9, and known threats to validity (analysis plan §6-§9). No estimator code runs here; results chapters consume `results/estimates/`.
+:::
+
+## Estimators (planned)
+
+| Spec | Method | Panel | Role |
+|---|---|---|---|
+| S1 | Event study (dynamic DiD) | A | Primary for RQ1 |
+| S2 | Static TWFE DiD | A | CRZ vs control; border vs control |
+| S3 | Cross-city synthetic control | B | Primary for systemwide RQ1 / RQ2 context |
+| S4 | Within-NYC synthetic control | A aggregates | Lower bound under H3 spillovers |
+| S5 | Synthetic DiD | A aggregates / B | Arkhangelsky et al. (2021) |
+| S6 | Bayesian structural time series | Single series | First-stage and secondary outcomes |
+
+## Inference contract
+
+Every estimator returns an `EstimateResult` (`src/cpca/estimators/base.py`) and serializes to `results/estimates/`. Point estimates are always reported with uncertainty intervals; specifications are not dropped for unwelcome signs.
