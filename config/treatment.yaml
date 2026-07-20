@@ -50,3 +50,87 @@ robustness_bands:
   border_alt_86th_lat_approx: 40.779
   border_alt_110th_lat_approx: 40.794
   control_min_distance_km_alt: [0.5, 2.0]
+
+# Stations excluded from primary Panel A specs (still kept in the panel with
+# excluded=True for transparency / robustness). Keys are station_complex_id.
+exclude_stations:
+  # Rockaway A/S branch - seasonal outer-Queens demand, not toll-related.
+  - id: "196"
+    name: "Aqueduct Racetrack (A)"
+    reason: seasonal
+    source: "Rockaway A branch; bottom-15 pre→post declines in EDA"
+  - id: "197"
+    name: "Aqueduct-N Conduit Av (A)"
+    reason: seasonal
+    source: "Rockaway A branch"
+  - id: "208"
+    name: "Beach 25 St (A)"
+    reason: seasonal
+    source: "Rockaway A branch"
+  - id: "207"
+    name: "Beach 36 St (A)"
+    reason: seasonal
+    source: "Rockaway A branch"
+  - id: "206"
+    name: "Beach 44 St (A)"
+    reason: seasonal
+    source: "Rockaway A branch"
+  - id: "205"
+    name: "Beach 60 St (A)"
+    reason: seasonal
+    source: "Rockaway A branch"
+  - id: "204"
+    name: "Beach 67 St (A)"
+    reason: seasonal
+    source: "Rockaway A branch"
+  - id: "200"
+    name: "Beach 90 St (A,S)"
+    reason: seasonal
+    source: "Rockaway A/S branch"
+  - id: "201"
+    name: "Beach 98 St (A,S)"
+    reason: seasonal
+    source: "Rockaway A/S branch"
+  - id: "202"
+    name: "Beach 105 St (A,S)"
+    reason: seasonal
+    source: "Rockaway A/S branch"
+  - id: "203"
+    name: "Rockaway Park-Beach 116 St (A,S)"
+    reason: seasonal
+    source: "Rockaway A/S branch"
+
+  # Flushing Line (7) station renewals / long-run platform skips overlapping sample.
+  # Source: https://www.mta.info/project/flushing-line (+ 2025-26 service advisories).
+  - id: "457"
+    name: "52 St (7)"
+    reason: construction
+    source: "MTA Flushing Line renewal; Manhattan-/Flushing-bound skips 2025-2027"
+  - id: "455"
+    name: "69 St (7)"
+    reason: construction
+    source: "MTA Flushing Line renewal; Manhattan-/Flushing-bound skips 2025-2027"
+  - id: "456"
+    name: "61 St-Woodside (7)"
+    reason: construction
+    source: "MTA Flushing Line renewal / structural work through 2027"
+  - id: "450"
+    name: "103 St-Corona Plaza (7)"
+    reason: construction
+    source: "MTA Flushing Line station renewal (began 2025)"
+  - id: "453"
+    name: "82 St-Jackson Hts (7)"
+    reason: construction
+    source: "MTA Flushing Line station renewal"
+  - id: "449"
+    name: "111 St (7)"
+    reason: construction
+    source: "MTA Flushing Line station renewal"
+  - id: "460"
+    name: "33 St-Rawson St (7)"
+    reason: construction
+    source: "MTA Flushing Line; temporary platforms / directional skips in 2026 advisories"
+  - id: "458"
+    name: "46 St-Bliss St (7)"
+    reason: construction
+    source: "MTA Flushing Line; temporary platforms / directional skips in 2026 advisories"

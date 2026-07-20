@@ -234,6 +234,24 @@ def holiday_weeks(week_starts: pd.Series) -> pd.Series:
     return week_starts.dt.normalize().isin(hol_weeks)
 
 
+def apply_exclude_stations(panel: pd.DataFrame, treatment: dict) -> pd.DataFrame:
+    """Flag stations listed in treatment.yaml exclude_stations.
+
+    Rows are retained; primary specs should filter primary_sample == True.
+    """
+    out = panel.copy()
+    excludes = treatment.get("exclude_stations") or []
+    id_to_reason = {str(row["id"]): str(row["reason"]) for row in excludes}
+    out["exclude_reason"] = out["station_complex_id"].map(id_to_reason)
+    out["excluded"] = out["exclude_reason"].notna()
+    # Primary DiD pool: not excluded, and not in the near buffer zone.
+    out["primary_sample"] = (~out["excluded"]) & out["zone"].isin(
+        ["crz", "border", "control"]
+    )
+    out["exclude_reason"] = out["exclude_reason"].fillna("")
+    return out
+
+
 def drop_unstable_stations(
     panel: pd.DataFrame,
     *,
@@ -346,17 +364,25 @@ def build_panel(
         sample_start=start,
         sample_end=end,
     )
+    panel = apply_exclude_stations(panel, treatment)
 
     panel = panel.sort_values(["station_complex_id", "week_start"]).reset_index(drop=True)
 
     # Dtypes for a stable on-disk schema.
     panel["station_complex_id"] = panel["station_complex_id"].astype(str)
-    for col in ("station_complex", "borough", "zone", "period"):
+    for col in ("station_complex", "borough", "zone", "period", "exclude_reason"):
         panel[col] = panel[col].astype(str)
     panel["in_crz"] = panel["in_crz"].astype(bool)
     panel["holiday_week"] = panel["holiday_week"].astype(bool)
     panel["fare_change"] = panel["fare_change"].astype(bool)
     panel["post"] = panel["post"].astype(bool)
+    panel["excluded"] = panel["excluded"].astype(bool)
+    panel["primary_sample"] = panel["primary_sample"].astype(bool)
+
+    exclude_ids = sorted({str(r["id"]) for r in (treatment.get("exclude_stations") or [])})
+    matched_exclude_ids = sorted(
+        set(panel.loc[panel["excluded"], "station_complex_id"].unique())
+    )
 
     manifest = {
         "panel": "panel_station_week",
@@ -371,6 +397,13 @@ def build_panel(
         "dropped_stations": dropped,
         "dropped_incomplete_edge_weeks": dropped_edge_weeks,
         "require_complete_weeks": bool(panel_cfg.get("require_complete_weeks", True)),
+        "exclude_stations": treatment.get("exclude_stations") or [],
+        "exclude_station_ids": exclude_ids,
+        "exclude_station_ids_matched": matched_exclude_ids,
+        "n_excluded_stations": len(matched_exclude_ids),
+        "n_primary_stations": int(
+            panel.loc[panel["primary_sample"], "station_complex_id"].nunique()
+        ),
         "min_week_coverage": float(panel_cfg["min_week_coverage"]),
         "weekday_peak_hours": peak_hours,
         "sample_windows": windows,
@@ -437,6 +470,8 @@ def main() -> int:
         f"({manifest['week_start_min']} → {manifest['week_start_max']})"
     )
     print("zone station counts:", manifest["zone_counts"])
+    print("excluded stations:", manifest["n_excluded_stations"])
+    print("primary-sample stations:", manifest["n_primary_stations"])
     print("dropped stations:", len(manifest["dropped_stations"]))
     return 0
 

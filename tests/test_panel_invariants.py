@@ -90,6 +90,9 @@ REQUIRED_COLUMNS = [
     "weeks_since_t0",
     "iso_year",
     "iso_week",
+    "excluded",
+    "exclude_reason",
+    "primary_sample",
 ]
 
 
@@ -277,6 +280,30 @@ class TestZoneAssignment:
         assert (n_zones == 1).all(), "Zone assignment changed within a station over time"
 
 
+class TestExcludeStations:
+    def test_exclude_list_ids_all_match(self, panel: pd.DataFrame, treatment: dict) -> None:
+        cfg_ids = {str(r["id"]) for r in treatment.get("exclude_stations") or []}
+        assert cfg_ids, "exclude_stations list is empty"
+        matched = set(panel.loc[panel["excluded"], "station_complex_id"].unique())
+        assert cfg_ids == matched, (
+            f"Config/panel exclude mismatch. "
+            f"only_in_config={sorted(cfg_ids - matched)} "
+            f"only_in_panel={sorted(matched - cfg_ids)}"
+        )
+
+    def test_exclude_reasons_are_known(self, panel: pd.DataFrame) -> None:
+        reasons = set(panel.loc[panel["excluded"], "exclude_reason"].unique())
+        assert reasons <= {"seasonal", "construction"}
+
+    def test_primary_sample_definition(self, panel: pd.DataFrame) -> None:
+        expected = (~panel["excluded"]) & panel["zone"].isin(["crz", "border", "control"])
+        assert (panel["primary_sample"] == expected).all()
+
+    def test_exclude_flag_stable_within_station(self, panel: pd.DataFrame) -> None:
+        n = panel.groupby("station_complex_id")["excluded"].nunique()
+        assert (n == 1).all()
+
+
 class TestManifest:
     def test_manifest_matches_panel(
         self, panel: pd.DataFrame, manifest: dict
@@ -287,3 +314,9 @@ class TestManifest:
         assert entry["n_weeks"] == panel["week_start"].nunique()
         assert entry["week_start_min"] == str(pd.to_datetime(panel["week_start"]).min().date())
         assert entry["week_start_max"] == str(pd.to_datetime(panel["week_start"]).max().date())
+        assert entry["n_excluded_stations"] == panel.loc[
+            panel["excluded"], "station_complex_id"
+        ].nunique()
+        assert entry["n_primary_stations"] == panel.loc[
+            panel["primary_sample"], "station_complex_id"
+        ].nunique()
