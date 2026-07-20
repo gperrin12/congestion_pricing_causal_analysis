@@ -138,3 +138,45 @@ exclude_stations:
     name: "46 St-Bliss St (7)"
     reason: construction
     source: "MTA Flushing Line; temporary platforms / directional skips in 2026 advisories"
+
+# S6 BSTS first-stage (analysis_plan.md §6-§7). CRZ vehicle entries lack
+# pre-T0 coverage, so the primary treated series is into-Manhattan B&T
+# crossings. Facility IDs from data.ny.gov ebfx-2m7v.
+bsts:
+  # Primary post window ends before the 2026-01-04 B&T toll hike (§9).
+  post_end_primary: "2025-12-31"
+  outcome: log_bt_manhattan_entries
+  nseasons: 7
+  state_model: local_linear_trend
+  niter: 2000
+  nwarmup: 1000
+  seed: 20250105
+  bt_treated:
+    - facility_id: "27"
+      facility: "Queens Midtown Tunnel"
+      direction: "Westbound to Manhattan"
+      series: bt_qmt_wb
+    - facility_id: "28"
+      facility: "Hugh L. Carey Tunnel"
+      direction: "Northbound to Manhattan"
+      series: bt_hlc_nb
+    - facility_id: "24"
+      facility: "Henry Hudson Bridge"
+      direction: "Southbound to Manhattan"
+      series: bt_hhb_sb
+  bt_controls:
+    - facility_id: "30"
+      facility: "Verrazzano - Narrows Bridge"
+      series: bt_verrazzano
+    - facility_id: "29"
+      facility: "Throgs Neck Bridge"
+      series: bt_throgs_neck
+    - facility_id: "23"
+      facility: "Bronx - Whitestone Bridge"
+      series: bt_bronx_whitestone
+    - facility_id: "26"
+      facility: "Cross Bay Bridge"
+      series: bt_cross_bay
+    - facility_id: "25"
+      facility: "Marine Parkway Bridge"
+      series: bt_marine_parkway

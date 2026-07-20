@@ -12,3 +12,5 @@ contextily>=1.6
 pytest>=8.0
 jupyter>=1.0
 ipykernel>=6.29
+bsts-causalimpact>=1.7
+matplotlib>=3.8

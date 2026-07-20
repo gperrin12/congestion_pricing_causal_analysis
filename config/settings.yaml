@@ -28,6 +28,10 @@ socrata:
       id: t6yz-b64h
       name: "MTA Congestion Relief Zone Vehicle Entries: Beginning 2025"
       url: https://data.ny.gov/resource/t6yz-b64h.json
+    bt_hourly_crossings:
+      id: ebfx-2m7v
+      name: "MTA Bridges and Tunnels Hourly Crossings: Beginning 2019"
+      url: https://data.ny.gov/resource/ebfx-2m7v.json
 
 mta_ridership:
   # Matches analysis_plan.md sample windows (inclusive of washout for raw pull).
@@ -45,6 +49,14 @@ crz_vehicle_entries:
   end_date: "2026-06-30"
   grain: day_detection_vehicle_time_period
   output_dir: data/raw/crz_vehicle_entries
+
+# B&T crossings proxy for S6 first-stage (analysis_plan.md §7). Aggregated at
+# pull to date × facility × direction (sum across payment / vehicle class).
+bt_crossings:
+  start_date: "2022-01-03"
+  end_date: "2026-06-30"
+  grain: day_facility_direction
+  output_dir: data/raw/bt_crossings
 
 noaa_ghcn:
   # Central Park daily weather covariates for Panel A (analysis_plan.md §4).
@@ -86,3 +98,11 @@ panel_station_week:
   # Keep only ISO weeks whose full Mon-Sun span lies inside [pre_start, post_end].
   # Drops partial edge weeks (e.g. week of 2026-06-29 when hard stop is 2026-06-30).
   require_complete_weeks: true
+
+panel_bt_day:
+  output_path: data/processed/panel_bt_day.parquet
+  manifest_path: data/processed/manifest.json
+
+panel_crz_vehicle_day:
+  output_path: data/processed/panel_crz_vehicle_day.parquet
+  manifest_path: data/processed/manifest.json
