@@ -6,6 +6,7 @@ export PYTHONPATH := src
 data:
 	$(PYTHON) -m cpca.ingest.download_mta_ridership
 	$(PYTHON) -m cpca.ingest.download_noaa_weather
+	$(PYTHON) -m cpca.ingest.download_crz_vehicle_entries
 	$(PYTHON) -m cpca.geo.build_crz_polygon
 	$(PYTHON) -m cpca.geo.assign_zones
 

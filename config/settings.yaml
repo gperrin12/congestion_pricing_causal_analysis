@@ -24,6 +24,10 @@ socrata:
       id: 39hk-dx4f
       name: "MTA Subway Stations"
       url: https://data.ny.gov/resource/39hk-dx4f.json
+    crz_vehicle_entries:
+      id: t6yz-b64h
+      name: "MTA Congestion Relief Zone Vehicle Entries: Beginning 2025"
+      url: https://data.ny.gov/resource/t6yz-b64h.json
 
 mta_ridership:
   # Matches analysis_plan.md sample windows (inclusive of washout for raw pull).
@@ -32,6 +36,15 @@ mta_ridership:
   # Aggregate across payment_method / fare_class_category at pull time.
   grain: station_hour
   output_dir: data/raw/mta_subway_hourly
+
+# First-stage / RQ2 outcome (analysis_plan.md §7). Source begins at T0
+# (2025-01-05); there is no pre-toll series in this dataset. Ingest aggregates
+# 10-minute source rows to day × crossing × vehicle class × time period.
+crz_vehicle_entries:
+  start_date: "2025-01-05"
+  end_date: "2026-06-30"
+  grain: day_detection_vehicle_time_period
+  output_dir: data/raw/crz_vehicle_entries
 
 noaa_ghcn:
   # Central Park daily weather covariates for Panel A (analysis_plan.md §4).
