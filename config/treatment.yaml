@@ -10,6 +10,10 @@ treatment:
 sample_windows:
   pre_start: "2022-01-03"
   pre_end: "2024-06-02"
+  # DiD / event-study estimation pre-window (S1/S2). Shortened after pretrend
+  # failure on the registered pre_start; full pre_start retained for SC/SDID.
+  # See analysis_plan.md §12 (2026-07-20 pretrends entry).
+  did_pre_start: "2023-07-01"
   washout_start: "2024-06-03"
   washout_end: "2025-01-04"
   post_start: "2025-01-05"
