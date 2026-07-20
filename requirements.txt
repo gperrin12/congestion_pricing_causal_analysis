@@ -9,3 +9,4 @@ tqdm>=4.66
 shapely>=2.0
 geopandas>=1.0
 contextily>=1.6
+pytest>=8.0

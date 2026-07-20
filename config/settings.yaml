@@ -70,3 +70,6 @@ panel_station_week:
   weekday_peak_hours: [7, 8, 9, 16, 17, 18]
   # Drop complexes missing more than this share of ISO weeks in-sample.
   min_week_coverage: 0.80
+  # Keep only ISO weeks whose full Mon-Sun span lies inside [pre_start, post_end].
+  # Drops partial edge weeks (e.g. week of 2026-06-29 when hard stop is 2026-06-30).
+  require_complete_weeks: true
