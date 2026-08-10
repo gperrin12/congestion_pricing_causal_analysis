@@ -1,1 +1,5 @@
-# the static version: a single "treated × post" coefficient. Simplest estimate, useful as the baseline everything else is compared against.
+"""S2 static TWFE DiD - implemented in cpca.estimators.did."""
+
+from cpca.estimators.did import fit_static_did
+
+__all__ = ["fit_static_did"]

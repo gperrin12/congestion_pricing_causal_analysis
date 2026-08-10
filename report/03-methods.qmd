@@ -1,7 +1,7 @@
 # Methods
 
 ::: {.callout-note}
-**Skeleton.** This chapter will document estimators S1-S6, the first-stage / manipulation check, robustness checks R1-R9, and known threats to validity (analysis plan §6-§9). No estimator code runs here; results chapters consume `results/estimates/`.
+**Skeleton.** This chapter documents estimators S1-S6, the first-stage / manipulation check, robustness checks R1-R9, and known threats to validity (analysis plan §6-§9). No estimator code runs here; results chapters consume `results/estimates/`.
 :::
 
 ## Estimators (planned)
@@ -14,6 +14,14 @@
 | S4 | Within-NYC synthetic control | A aggregates | Lower bound under H3 spillovers |
 | S5 | Synthetic DiD | A aggregates / B | Arkhangelsky et al. (2021) |
 | S6 | Bayesian structural time series | Single series | First-stage and secondary outcomes |
+
+### S1 - Event study (dynamic DiD)
+
+Station and week fixed effects on Panel A with monthly `treated x relative-month` coefficients (reference = last pre-period relative month remaining after the DiD window cuts). Estimation sample starts at `did_pre_start` (2023-07-01), drops the washout, and ends at `post_end`. Primary specs include station-specific linear trends (§12); clustered SEs on `station_complex_id`. Treatment timing is uniform - all 66 CRZ stations are treated on 2025-01-05 - so there is no staggered adoption and the Goodman-Bacon negative-weighting critique of TWFE does not apply here.
+
+### S2 - Static TWFE DiD
+
+Same sample and FE structure as S1, with a single `treated x post` coefficient, run separately for CRZ vs control and border vs control. Primary specs include station-specific linear trends; the unadjusted TWFE is retained as robustness-only.
 
 ## Inference contract
 

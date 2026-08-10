@@ -19,6 +19,9 @@ panel:
 
 estimates:
 	$(PYTHON) -m cpca.estimators.bsts
+	$(PYTHON) -m cpca.estimators.did --treated-zone crz
+	$(PYTHON) -m cpca.estimators.did --treated-zone border
+	$(PYTHON) -m cpca.inference.placebo_did --treated-zone crz
 
 report:
 	@command -v quarto >/dev/null 2>&1 || { \

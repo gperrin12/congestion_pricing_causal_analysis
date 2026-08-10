@@ -139,6 +139,17 @@ exclude_stations:
     reason: construction
     source: "MTA Flushing Line; temporary platforms / directional skips in 2026 advisories"
 
+# S1/S2 TWFE DiD and event study (analysis_plan.md §6; §12 2026-07-20).
+# Primary specs use station-specific linear trends; unadjusted is robustness-only.
+did:
+  outcome: log_weekly_entries
+  contrasts:
+    - crz_vs_control
+    - border_vs_control
+  station_trends: true
+  cluster: station_complex_id
+  joint_test_alpha: 0.10
+
 # S6 BSTS first-stage (analysis_plan.md §6-§7). CRZ vehicle entries lack
 # pre-T0 coverage, so the primary treated series is into-Manhattan B&T
 # crossings. Facility IDs from data.ny.gov ebfx-2m7v.
