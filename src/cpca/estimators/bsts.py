@@ -20,6 +20,11 @@ import pandas as pd
 import yaml
 
 from cpca.estimators.base import EstimateResult, TreatmentConfig, serialize_estimate
+from cpca.panel.holidays import (
+    att_exclusion_mask,
+    holiday_cfg,
+    winter_trough_mask,
+)
 from cpca.plots import style as plot_style
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -38,6 +43,7 @@ def prepare_ci_frame(
 ) -> pd.DataFrame:
     """Wide frame indexed by date: y + covariates for CausalImpact."""
     bsts = config.bsts
+    hcfg = holiday_cfg(config)
     control_cols = [s["series"] for s in bsts["bt_controls"]]
     if outcome.startswith("log_"):
         covars = [f"log_{c}" for c in control_cols]
@@ -45,10 +51,13 @@ def prepare_ci_frame(
         covars = list(control_cols)
     covars = covars + ["precip_mm", "tavg_c"]
 
+    holiday_covars = list(hcfg.get("bsts_covariates") or [])
+    trough_start = str(hcfg.get("trough_start_md") or "12-24")
+    trough_end = str(hcfg.get("trough_end_md") or "01-02")
+
     windows = config.sample_windows
     pre_start = pd.Timestamp(windows["pre_start"])
     pre_end = pd.Timestamp(windows["pre_end"])
-    post_start = pd.Timestamp(windows["post_start"])
     post_end = pd.Timestamp(bsts.get("post_end_primary") or windows["post_end"])
 
     work = panel.copy()
@@ -57,6 +66,17 @@ def prepare_ci_frame(
     # days between pre_end and post_start). ATT is averaged on the post window only.
     keep = (work["date"] >= pre_start) & (work["date"] <= post_end)
     work = work.loc[keep].copy()
+
+    if "winter_trough" in holiday_covars:
+        work["winter_trough"] = winter_trough_mask(
+            work["date"], trough_start, trough_end
+        ).astype(float)
+    if "holiday" in holiday_covars:
+        if "holiday" not in work.columns:
+            raise KeyError("Panel missing holiday flag required by bsts_covariates")
+        work["holiday"] = work["holiday"].astype(bool).astype(float)
+
+    covars = covars + [c for c in holiday_covars if c not in covars]
 
     missing_cov = [c for c in covars if c not in work.columns]
     if missing_cov:
@@ -77,6 +97,7 @@ def fit_bsts(
     config: TreatmentConfig,
     *,
     outcome: str | None = None,
+    att_holiday_mode: str | None = None,
 ) -> EstimateResult:
     try:
         from causal_impact import CausalImpact
@@ -87,8 +108,23 @@ def fit_bsts(
         ) from exc
 
     bsts = config.bsts
+    hcfg = holiday_cfg(config)
     outcome = outcome or bsts.get("outcome") or "log_bt_manhattan_entries"
     frame = prepare_ci_frame(panel, outcome=outcome, config=config)
+
+    primary_att = str(hcfg.get("bsts_primary_att") or "exclude_trough_days")
+    if att_holiday_mode is None:
+        att_mode = "exclude" if primary_att.startswith("exclude") else "include"
+    else:
+        att_mode = att_holiday_mode
+    if att_mode not in {"exclude", "include"}:
+        raise ValueError(
+            f"att_holiday_mode must be 'exclude' or 'include', got {att_mode!r}"
+        )
+
+    trough_start = str(hcfg.get("trough_start_md") or "12-24")
+    trough_end = str(hcfg.get("trough_end_md") or "01-02")
+    use_fed = bool(hcfg.get("use_federal_holidays", True))
 
     windows = config.sample_windows
     t0 = pd.Timestamp(config.t0)
@@ -144,9 +180,32 @@ def fit_bsts(
 
     # Reported ATT: T0 through primary post end (washout excluded from average).
     att_mask = (inf.index >= att_lo) & (inf.index <= att_hi)
+    holiday_series = None
+    if "holiday" in frame.columns:
+        holiday_series = frame["holiday"].reindex(inf.index).fillna(0).astype(bool)
+    elif "holiday" in panel.columns:
+        hol = panel.copy()
+        hol["date"] = pd.to_datetime(hol["date"]).dt.normalize()
+        holiday_series = (
+            hol.set_index("date")["holiday"].astype(bool).reindex(inf.index).fillna(False)
+        )
+
+    exclude_days = att_exclusion_mask(
+        inf.index,
+        holiday=holiday_series,
+        start_md=trough_start,
+        end_md=trough_end,
+        use_federal_holidays=use_fed,
+    )
+    n_post_full = int(att_mask.sum())
+    if att_mode == "exclude":
+        att_mask = att_mask & ~exclude_days.to_numpy()
+    n_post_att = int(att_mask.sum())
+    n_excluded = n_post_full - n_post_att
+
     post_inf = inf.loc[att_mask]
     if post_inf.empty:
-        raise RuntimeError("No inference rows in the T0+ ATT window")
+        raise RuntimeError("No inference rows in the T0+ ATT window after holiday filter")
 
     effects = post_inf["point_effect"].astype(float)
     att_abs = float(effects.mean())
@@ -216,7 +275,13 @@ def fit_bsts(
         "post_start": str(att_lo.date()),
         "post_end": str(att_hi.date()),
         "n_pre": int(((frame.index >= pre_lo) & (frame.index <= pre_hi)).sum()),
-        "n_post": int(att_mask.sum()),
+        "n_post": n_post_att,
+        "n_post_att_days": n_post_att,
+        "n_post_full_window": n_post_full,
+        "n_post_excluded_holiday_trough": n_excluded,
+        "att_holiday_mode": att_mode,
+        "trough_start_md": trough_start,
+        "trough_end_md": trough_end,
         "n_library_post": int(
             ((inf.index >= lib_post_lo) & (inf.index <= lib_post_hi)).sum()
         ),
@@ -228,7 +293,8 @@ def fit_bsts(
             "Primary first-stage uses into-Manhattan B&T crossings; "
             "CRZ vehicle entries lack pre-T0 coverage. CausalImpact library "
             "post window starts day after pre_end (includes washout for "
-            "forecast continuity); reported ATT averages T0 onward only."
+            "forecast continuity); reported ATT averages T0 onward, with "
+            "holiday/winter-trough days excluded when att_holiday_mode=exclude."
         ),
     }
     try:
@@ -247,9 +313,13 @@ def fit_bsts(
             ],
             "att_period": [str(att_lo.date()), str(att_hi.date())],
             "washout_excluded_from_att": True,
+            "att_holiday_mode": att_mode,
+            "trough_start_md": trough_start,
+            "trough_end_md": trough_end,
             "model_args": model_args,
             "bt_treated": bsts.get("bt_treated"),
             "bt_controls": bsts.get("bt_controls"),
+            "holiday_covariates": list(hcfg.get("bsts_covariates") or []),
         },
         att=float(rel_att),
         ci_low=float(rel_lo),
@@ -334,6 +404,12 @@ def parse_args() -> argparse.Namespace:
         default=treatment["bsts"].get("outcome", "log_bt_manhattan_entries"),
     )
     p.add_argument(
+        "--att-holiday-mode",
+        default=None,
+        choices=["exclude", "include"],
+        help="Primary exclude holiday/trough days from ATT average; include = full post window",
+    )
+    p.add_argument(
         "--out-dir",
         default=str(Path(settings["paths"]["results"]) / "estimates"),
     )
@@ -357,9 +433,17 @@ def main() -> int:
         return 1
 
     panel = pd.read_parquet(panel_path)
-    result = fit_bsts(panel, config, outcome=args.outcome)
+    result = fit_bsts(
+        panel,
+        config,
+        outcome=args.outcome,
+        att_holiday_mode=args.att_holiday_mode,
+    )
 
     stem = f"bsts_{args.outcome}"
+    att_mode = result.spec.get("att_holiday_mode") or "exclude"
+    if att_mode == "include":
+        stem += "_att_all_days"
     out_dir = ROOT / args.out_dir
     json_path = serialize_estimate(result, out_dir, stem)
     fig_path = plot_bsts(result, ROOT / args.figure)
@@ -370,12 +454,14 @@ def main() -> int:
     print(
         f"ATT (reported)={result.att:.4f} "
         f"CI=[{result.ci_low:.4f}, {result.ci_high:.4f}] "
-        f"relative_att={rel}"
+        f"relative_att={rel} att_holiday_mode={att_mode}"
     )
     print(
         f"post window {result.diagnostics['post_start']} to "
         f"{result.diagnostics['post_end']} "
-        f"(n_post={result.diagnostics['n_post']})"
+        f"(n_post={result.diagnostics['n_post']}; "
+        f"excluded_holiday_trough="
+        f"{result.diagnostics.get('n_post_excluded_holiday_trough')})"
     )
     return 0
 
