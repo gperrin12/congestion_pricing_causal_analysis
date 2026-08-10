@@ -28,11 +28,13 @@ import pandas as pd
 import yaml
 
 from cpca.estimators.base import EstimateResult, TreatmentConfig, serialize_estimate
+from cpca.panel.holidays import flag_trough_week, holiday_cfg
 from cpca.plots import style as plot_style
 
 ROOT = Path(__file__).resolve().parents[3]
 
 _REL_COEF_RE = re.compile(r"^rel_month::(-?\d+):treated$")
+_HOLIDAY_MODES = {"exclude", "interact", "none"}
 
 
 def load_yaml(path: Path) -> dict:
@@ -51,6 +53,23 @@ def _require_pyfixest():
     return pf
 
 
+def _resolve_holiday_mode(
+    config: TreatmentConfig, holiday_mode: str | None
+) -> str:
+    if holiday_mode is not None:
+        mode = holiday_mode
+    else:
+        primary = str(
+            holiday_cfg(config).get("did_primary") or "exclude_trough_weeks"
+        )
+        mode = "exclude" if primary.startswith("exclude") else "interact"
+    if mode not in _HOLIDAY_MODES:
+        raise ValueError(
+            f"holiday_mode must be one of {sorted(_HOLIDAY_MODES)}, got {mode!r}"
+        )
+    return mode
+
+
 def add_rel_month(df: pd.DataFrame, t0: str | pd.Timestamp) -> pd.DataFrame:
     """Calendar month relative to the month containing T0."""
     out = df.copy()
@@ -67,6 +86,7 @@ def build_did_sample(
     *,
     treated_zone: str,
     outcome: str,
+    holiday_mode: str | None = None,
 ) -> tuple[pd.DataFrame, dict[str, Any]]:
     """Primary-sample DiD window: did_pre_start..post_end, washout dropped."""
     windows = config.sample_windows
@@ -75,6 +95,11 @@ def build_did_sample(
     washout_end = pd.Timestamp(windows["washout_end"])
     post_end = pd.Timestamp(windows["post_end"])
     t0 = pd.Timestamp(config.t0)
+    mode = _resolve_holiday_mode(config, holiday_mode)
+    hcfg = holiday_cfg(config)
+    trough_start = str(hcfg.get("trough_start_md") or "12-24")
+    trough_end = str(hcfg.get("trough_end_md") or "01-02")
+    use_fed = bool(hcfg.get("use_federal_holidays", True))
 
     if treated_zone not in {"crz", "border"}:
         raise ValueError(f"treated_zone must be 'crz' or 'border', got {treated_zone!r}")
@@ -114,6 +139,30 @@ def build_did_sample(
     sample["t_index"] = (sample["week_start"] - origin).dt.days / 7.0
     sample["week_fe"] = sample["week_start"].dt.strftime("%Y-%m-%d")
 
+    sample["trough_week"] = flag_trough_week(
+        sample["week_start"], start_md=trough_start, end_md=trough_end
+    ).astype(float)
+    if "holiday_week" in sample.columns:
+        sample["holiday_week"] = sample["holiday_week"].astype(bool).astype(float)
+    else:
+        sample["holiday_week"] = 0.0
+    if not use_fed:
+        sample["holiday_week"] = 0.0
+
+    n_weeks_before = int(sample["week_start"].nunique())
+    holiday_or_trough = (sample["holiday_week"] > 0) | (sample["trough_week"] > 0)
+    n_weeks_holiday_trough = int(
+        sample.loc[holiday_or_trough, "week_start"].nunique()
+    )
+
+    if mode == "exclude":
+        sample = sample.loc[~holiday_or_trough].copy()
+        if sample.empty:
+            raise ValueError("Empty DiD sample after holiday/trough week exclusion")
+    elif mode == "interact":
+        sample["treated_holiday"] = sample["treated"] * sample["holiday_week"]
+        sample["treated_trough"] = sample["treated"] * sample["trough_week"]
+
     zone_counts = {
         z: int(sample.loc[sample["zone"] == z, "station_complex_id"].nunique())
         for z in sorted(sample["zone"].unique())
@@ -126,11 +175,18 @@ def build_did_sample(
         "window_start": str(sample["week_start"].min().date()),
         "window_end": str(sample["week_start"].max().date()),
         "n_weeks": int(sample["week_start"].nunique()),
+        "n_weeks_before_holiday_filter": n_weeks_before,
+        "n_weeks_holiday_trough": n_weeks_holiday_trough,
+        "n_weeks_dropped": int(n_weeks_holiday_trough if mode == "exclude" else 0),
         "n_obs": int(len(sample)),
         "station_counts_by_zone": zone_counts,
         "treated_zone": treated_zone,
         "outcome": outcome,
         "t0": str(t0.date()),
+        "holiday_mode": mode,
+        "trough_start_md": trough_start,
+        "trough_end_md": trough_end,
+        "use_federal_holidays": use_fed,
     }
     return sample, meta
 
@@ -166,14 +222,19 @@ def _fit_feols(
     return pf.feols(fml, data=sample, vcov={"CRV1": cluster})
 
 
-def _static_formula(*, station_trends: bool) -> str:
+def _static_formula(*, station_trends: bool, holiday_mode: str) -> str:
+    rhs = "did"
+    if holiday_mode == "interact":
+        rhs = f"{rhs} + treated_holiday + treated_trough"
     if station_trends:
-        return "y ~ did + i(station_complex_id, t_index) | station_complex_id + week_fe"
-    return "y ~ did | station_complex_id + week_fe"
+        rhs = f"{rhs} + i(station_complex_id, t_index)"
+    return f"y ~ {rhs} | station_complex_id + week_fe"
 
 
-def _event_formula(*, ref: int, station_trends: bool) -> str:
+def _event_formula(*, ref: int, station_trends: bool, holiday_mode: str) -> str:
     rhs = f"i(rel_month, treated, ref={ref})"
+    if holiday_mode == "interact":
+        rhs = f"{rhs} + treated_holiday + treated_trough"
     if station_trends:
         rhs = f"{rhs} + i(station_complex_id, t_index)"
     return f"y ~ {rhs} | station_complex_id + week_fe"
@@ -227,18 +288,24 @@ def fit_static_did(
     outcome: str | None = None,
     treated_zone: str = "crz",
     station_trends: bool | None = None,
+    holiday_mode: str | None = None,
 ) -> EstimateResult:
     """S2: single treated x post coefficient with station and week FE."""
     did_cfg = config.did
     outcome = outcome or did_cfg.get("outcome") or "log_weekly_entries"
     if station_trends is None:
         station_trends = bool(did_cfg.get("station_trends", True))
+    mode = _resolve_holiday_mode(config, holiday_mode)
     cluster = _cluster_var(config)
 
     sample, meta = build_did_sample(
-        panel, config, treated_zone=treated_zone, outcome=outcome
+        panel,
+        config,
+        treated_zone=treated_zone,
+        outcome=outcome,
+        holiday_mode=mode,
     )
-    fml = _static_formula(station_trends=station_trends)
+    fml = _static_formula(station_trends=station_trends, holiday_mode=mode)
     fit = _fit_feols(sample, fml=fml, cluster=cluster)
 
     if "did" not in fit.coef().index:
@@ -267,6 +334,9 @@ def fit_static_did(
         "outcome": outcome,
         "formula": fml,
         "washout_excluded": True,
+        "holiday_mode": mode,
+        "trough_start_md": meta["trough_start_md"],
+        "trough_end_md": meta["trough_end_md"],
     }
     return EstimateResult(
         estimator="twfe_did",
@@ -288,20 +358,26 @@ def fit_event_study(
     outcome: str | None = None,
     treated_zone: str = "crz",
     station_trends: bool | None = None,
+    holiday_mode: str | None = None,
 ) -> EstimateResult:
     """S1: dynamic DiD with monthly treated x rel_month coefficients."""
     did_cfg = config.did
     outcome = outcome or did_cfg.get("outcome") or "log_weekly_entries"
     if station_trends is None:
         station_trends = bool(did_cfg.get("station_trends", True))
+    mode = _resolve_holiday_mode(config, holiday_mode)
     cluster = _cluster_var(config)
     alpha = _joint_alpha(config)
 
     sample, meta = build_did_sample(
-        panel, config, treated_zone=treated_zone, outcome=outcome
+        panel,
+        config,
+        treated_zone=treated_zone,
+        outcome=outcome,
+        holiday_mode=mode,
     )
     ref = _reference_rel_month(sample)
-    fml = _event_formula(ref=ref, station_trends=station_trends)
+    fml = _event_formula(ref=ref, station_trends=station_trends, holiday_mode=mode)
     fit = _fit_feols(sample, fml=fml, cluster=cluster)
 
     coef_names = [str(n) for n in fit.coef().index]
@@ -334,7 +410,10 @@ def fit_event_study(
         }
     )
     dynamic = (
-        pd.DataFrame(rows).sort_values("rel_month").drop_duplicates("rel_month").reset_index(drop=True)
+        pd.DataFrame(rows)
+        .sort_values("rel_month")
+        .drop_duplicates("rel_month")
+        .reset_index(drop=True)
     )
 
     att, ci_low, ci_high = _average_post_lags(fit, coef_names)
@@ -353,7 +432,11 @@ def fit_event_study(
         "formula": fml,
         "n_coefficients": int(len(fit.coef())),
         "n_post_lags_averaged": int(
-            sum(1 for n in coef_names if (rm := _parse_rel_month_coef(n)) is not None and rm >= 0)
+            sum(
+                1
+                for n in coef_names
+                if (rm := _parse_rel_month_coef(n)) is not None and rm >= 0
+            )
         ),
     }
     spec = {
@@ -366,6 +449,9 @@ def fit_event_study(
         "reference_rel_month": ref,
         "formula": fml,
         "washout_excluded": True,
+        "holiday_mode": mode,
+        "trough_start_md": meta["trough_start_md"],
+        "trough_end_md": meta["trough_end_md"],
     }
     return EstimateResult(
         estimator="event_study_did",
@@ -468,6 +554,12 @@ def parse_args() -> argparse.Namespace:
         help="Robustness: omit station-specific linear trends",
     )
     p.add_argument(
+        "--holiday-mode",
+        default=None,
+        choices=sorted(_HOLIDAY_MODES),
+        help="Holiday adjustment: exclude (primary), interact (robustness), or none",
+    )
+    p.add_argument(
         "--out-dir",
         default=str(Path(settings["paths"]["results"]) / "estimates"),
     )
@@ -484,6 +576,7 @@ def main() -> int:
     treatment = load_yaml(ROOT / "config" / "treatment.yaml")
     config = TreatmentConfig.from_yaml(treatment)
     station_trends = not args.no_station_trends
+    holiday_mode = _resolve_holiday_mode(config, args.holiday_mode)
 
     panel_path = ROOT / args.panel
     if not panel_path.exists():
@@ -505,6 +598,7 @@ def main() -> int:
             outcome=args.outcome,
             treated_zone=zone,
             station_trends=station_trends,
+            holiday_mode=holiday_mode,
         )
         tw = fit_static_did(
             panel,
@@ -512,12 +606,19 @@ def main() -> int:
             outcome=args.outcome,
             treated_zone=zone,
             station_trends=station_trends,
+            holiday_mode=holiday_mode,
         )
         es_stem = f"event_study_did_{zone}_{args.outcome}"
         tw_stem = f"twfe_did_{zone}_{args.outcome}"
         if not station_trends:
             es_stem += "_no_trends"
             tw_stem += "_no_trends"
+        if holiday_mode == "interact":
+            es_stem += "_hol_interact"
+            tw_stem += "_hol_interact"
+        elif holiday_mode == "none":
+            es_stem += "_hol_none"
+            tw_stem += "_hol_none"
         es_path = serialize_estimate(es, out_dir, es_stem)
         tw_path = serialize_estimate(tw, out_dir, tw_stem)
 
@@ -534,11 +635,12 @@ def main() -> int:
         print(
             f"S1 {zone}: ATT={es.att:.4f} CI=[{es.ci_low:.4f}, {es.ci_high:.4f}] "
             f"ref={es.diagnostics.get('reference_rel_month')} "
-            f"joint_p={es.diagnostics.get('joint_wald_pvalue')}"
+            f"joint_p={es.diagnostics.get('joint_wald_pvalue')} "
+            f"holiday_mode={holiday_mode}"
         )
         print(
             f"S2 {zone}: ATT={tw.att:.4f} CI=[{tw.ci_low:.4f}, {tw.ci_high:.4f}] "
-            f"p={tw.diagnostics.get('pvalue')}"
+            f"p={tw.diagnostics.get('pvalue')} holiday_mode={holiday_mode}"
         )
     return 0
 

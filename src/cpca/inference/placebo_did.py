@@ -53,6 +53,7 @@ def _placebo_config(config: TreatmentConfig) -> tuple[TreatmentConfig, pd.Timest
         sample_windows=placebo_windows,
         bsts=dict(config.bsts),
         did=dict(config.did),
+        holiday_adjustment=dict(config.holiday_adjustment),
     )
     return placebo, midpoint
 

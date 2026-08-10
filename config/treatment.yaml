@@ -139,6 +139,21 @@ exclude_stations:
     reason: construction
     source: "MTA Flushing Line; temporary platforms / directional skips in 2026 advisories"
 
+# Holiday / Christmas-New Year trough adjustment (analysis_plan.md §12).
+# Primary DiD drops holiday + trough weeks; primary BSTS ATT averages
+# non-holiday/non-trough post days with holiday+trough covariates.
+holiday_adjustment:
+  # Inclusive MM-DD each year; applied to every winter in the sample.
+  trough_start_md: "12-24"
+  trough_end_md: "01-02"
+  use_federal_holidays: true
+  did_primary: exclude_trough_weeks
+  did_robustness: treated_holiday_interactions
+  bsts_primary_att: exclude_trough_days
+  bsts_covariates:
+    - holiday
+    - winter_trough
+
 # S1/S2 TWFE DiD and event study (analysis_plan.md §6; §12 2026-07-20).
 # Primary specs use station-specific linear trends; unadjusted is robustness-only.
 did:
