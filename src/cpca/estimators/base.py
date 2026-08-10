@@ -18,6 +18,7 @@ class TreatmentConfig:
     fare_change_date: str
     sample_windows: dict[str, str]
     bsts: dict[str, Any] = field(default_factory=dict)
+    did: dict[str, Any] = field(default_factory=dict)
 
     @classmethod
     def from_yaml(cls, treatment: dict) -> TreatmentConfig:
@@ -26,6 +27,7 @@ class TreatmentConfig:
             fare_change_date=treatment["treatment"]["fare_change_date"],
             sample_windows=dict(treatment["sample_windows"]),
             bsts=dict(treatment.get("bsts") or {}),
+            did=dict(treatment.get("did") or {}),
         )
 
 

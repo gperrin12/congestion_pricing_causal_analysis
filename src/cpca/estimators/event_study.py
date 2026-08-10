@@ -1,1 +1,5 @@
-# ynamic difference-in-differences via pyfixest: station and week fixed effects, one coefficient per month relative to January 2025. Produces the pre-trend diagnostics and the headline figure.
+"""S1 event study - implemented in cpca.estimators.did."""
+
+from cpca.estimators.did import fit_event_study, plot_event_study
+
+__all__ = ["fit_event_study", "plot_event_study"]
